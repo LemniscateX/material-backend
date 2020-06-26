@@ -1,7 +1,9 @@
 const express = require('express');
+var cors = require('cors');
 const Fuse = require('fuse.js');
 const util = require('./util');
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 app.map = (a, route) => {
@@ -29,10 +31,24 @@ var historyMap = new Map([
 ]);
 
 const history = {
-  list: (_, resp) => {
-    resp.send([...historyMap.entries()].map(([key, value]) => { return { id: key, log: value }; }));
+  list: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
+    resp.send({ ok: true, data: [...historyMap.entries()].map(([key, value]) => { return { id: key, log: value }; }) });
   },
   revoke: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
     const id = req.body.id;
     if (historyMap.has(id)) {
       historyMap.delete(id);
@@ -87,12 +103,28 @@ var storeMap = new Map([
 ]);
 
 const store = {
-  list: (_, resp) => {
-    resp.send([...storeMap.entries()].map(([key, value]) => {
-      return { name: key, ...value };
-    }));
+  list: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
+    resp.send({
+      ok: true, data: [...storeMap.entries()].map(([key, value]) => {
+        return { name: key, ...value };
+      })
+    });
   },
   in: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
     // req.body format:
     // {
     //   "name": "keyboard",
@@ -122,6 +154,13 @@ const store = {
     }
   },
   out: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
     // req.body format:
     // {
     //   "name": "keyboard",
@@ -147,6 +186,13 @@ const store = {
     }
   },
   change: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
     // req.body format:
     // {
     //   "name": "keyboard",
@@ -172,10 +218,17 @@ const store = {
       }
       resp.send({ ok: true });
     } else {
-      resp.status(404).send(`${args.name} not found`);
+      resp.status(404).send({ok: true, data: `${args.name} not found`});
     }
   },
   search: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
     // req.params format:
     // /store/search/keyboard
     var list = [...storeMap.entries()].map(([key, value]) => {
@@ -202,7 +255,7 @@ const store = {
     };
     const fuse = new Fuse(list, options);
     const pattern = req.params.pattern;
-    resp.send(fuse.search(pattern).map((r) => r.item));
+    resp.send({ok: true, data: fuse.search(pattern).map((r) => r.item)});
   },
 };
 
@@ -229,7 +282,7 @@ const checkToken = (token) => {
       return [false, 'user does not exist'];
     }
   } else {
-    return [false, 'haven\'t login'];
+    return [false, 'token is expired'];
   }
 };
 
@@ -296,9 +349,18 @@ const user = {
     }
   },
   list: (req, resp) => {
-    resp.send([...userMap.entries()].map(([key, value]) => {
-      return { username: key, permission: value.permission };
-    }));
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (!isOk) {
+      resp.status(400).send({ ok: false, err: errOrUser });
+      return;
+    }
+
+    resp.send({
+      ok: true, data: [...userMap.entries()].map(([key, value]) => {
+        return { username: key, permission: value.permission };
+      })
+    });
   },
 };
 
@@ -311,16 +373,17 @@ const auth = {
     // }
     const args = req.body;
     if (userMap.has(args.username)) {
-      if (args.password == userMap.get(args.username).password) {
+      const user = userMap.get(args.username)
+      if (args.password == user.password) {
         const token = util.makeToken(16);
         userMap.get(args.username).token = token;
         tokenToUser.set(token, args.username);
-        resp.send({ ok: true, token: token });
+        resp.send({ ok: true, token: token, isAdmin: user.permission == 'admin' });
       } else {
-        resp.status(400).send('incorrect password');
+        resp.status(400).send({ ok: false, err: 'incorrect password' });
       }
     } else {
-      resp.status(404).send(`${args.usename} not found`);
+      resp.status(404).send({ ok: false, err: `${args.usename} not found` });
     }
   },
   logout: (req, resp) => {
@@ -333,7 +396,7 @@ const auth = {
     } else {
       resp.status(400).send({ ok: false, err: errOrUser });
     }
-  }
+  },
 };
 
 // app['get']('/history/list', history.list)
@@ -373,7 +436,7 @@ app.map({
   },
   '/logout': {
     post: auth.logout,
-  }
+  },
 });
 
 app.use((_, resp) => {
