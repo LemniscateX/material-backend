@@ -1,0 +1,386 @@
+const express = require('express');
+const Fuse = require('fuse.js');
+const util = require('./util');
+const app = express();
+app.use(express.json());
+
+app.map = (a, route) => {
+  route = route || '';
+  for (var key in a) {
+    switch (typeof a[key]) {
+      // { '/path': { ... }}
+      case 'object':
+        app.map(a[key], route + key);
+        break;
+      // get: function(){ ... }
+      case 'function':
+        app[key](route, a[key]);
+        break;
+    }
+  }
+};
+
+var historyMap = new Map([
+  ['0', 'Put XXX into YYY'],
+  ['1', 'Put NNN into YYY'],
+  ['2', 'Put ZZZ into YYY'],
+  ['3', 'Put GGG into CCC'],
+  ['4', 'Put JJJ into YYY'],
+]);
+
+const history = {
+  list: (_, resp) => {
+    resp.send([...historyMap.entries()].map(([key, value]) => { return { id: key, log: value }; }));
+  },
+  revoke: (req, resp) => {
+    const id = req.body.id;
+    if (historyMap.has(id)) {
+      historyMap.delete(id);
+      resp.send({ ok: true });
+    } else {
+      resp.status(404).send({ ok: false, err: `id ${id} not found` });
+    }
+  }
+};
+
+var storeMap = new Map([
+  ["table", {
+    amount: 10,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["monitor", {
+    amount: 10,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["mouse", {
+    amount: 10,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["keyboard", {
+    amount: 10,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["airphone", {
+    amount: 10,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+]);
+
+const store = {
+  list: (_, resp) => {
+    resp.send([...storeMap.entries()].map(([key, value]) => {
+      return { name: key, ...value };
+    }));
+  },
+  in: (req, resp) => {
+    // req.body format:
+    // {
+    //   "name": "keyboard",
+    //   "amount": 20,
+    //   "operator": "9527",
+    //   "place": "4444",
+    //   "info": "urgent",
+    // }
+    const args = req.body;
+    if (args.amount <= 0) {
+      resp.status(400).send({ ok: false, err: `amount <= 0` });
+      return;
+    }
+
+    if (storeMap.has(args.name)) {
+      s = storeMap.get(args.name);
+      s.amount += args.amount;
+      resp.send({ ok: true });
+    } else {
+      storeMap.set(args.name, {
+        amount: args.amount,
+        operator: args.operator,
+        place: args.place,
+        info: args.info,
+      });
+      resp.send({ ok: true });
+    }
+  },
+  out: (req, resp) => {
+    // req.body format:
+    // {
+    //   "name": "keyboard",
+    //   "amount": 20,
+    // }
+    const args = req.body;
+    if (storeMap.has(args.name)) {
+      s = storeMap.get(args.name);
+
+      if (s.amount < args.amount) {
+        resp.status(400).send({ ok: false, err: `${args.name} not enough` });
+        return;
+      }
+
+      s.amount -= args.amount;
+
+      if (s.amount == 0) {
+        storeMap.delete(args.name);
+      }
+      resp.send({ ok: true });
+    } else {
+      resp.status(404).send({ ok: false, err: `${args.name} not found` });
+    }
+  },
+  change: (req, resp) => {
+    // req.body format:
+    // {
+    //   "name": "keyboard",
+    //   "amount": 20,
+    //   "operator": "anno",
+    //   "place": "20202",
+    //   "info": "<empty>",
+    // }
+    const args = req.body;
+    if (storeMap.has(args.name)) {
+      var s = storeMap.get(args.name);
+      if (args.amount) {
+        s.amount = args.amount;
+      }
+      if (args.operator) {
+        s.operator = args.operator;
+      }
+      if (args.place) {
+        s.place = args.place;
+      }
+      if (args.info) {
+        s.info = args.info;
+      }
+      resp.send({ ok: true });
+    } else {
+      resp.status(404).send(`${args.name} not found`);
+    }
+  },
+  search: (req, resp) => {
+    // req.params format:
+    // /store/search/keyboard
+    var list = [...storeMap.entries()].map(([key, value]) => {
+      return { name: key, ...value };
+    });
+    const options = {
+      // isCaseSensitive: false,
+      // includeScore: false,
+      // shouldSort: true,
+      // includeMatches: false,
+      // findAllMatches: false,
+      // minMatchCharLength: 1,
+      // location: 0,
+      // threshold: 0.6,
+      // distance: 100,
+      // useExtendedSearch: false,
+      // ignoreLocation: false,
+      // ignoreFieldNorm: false,
+      keys: [
+        "name",
+        "operator",
+        "place",
+      ]
+    };
+    const fuse = new Fuse(list, options);
+    const pattern = req.params.pattern;
+    resp.send(fuse.search(pattern).map((r) => r.item));
+  },
+};
+
+var userMap = new Map([
+  ['admin', {
+    password: "p@ssw0rd",
+    permission: "admin",
+  }]
+]);
+var tokenToUser = new Map();
+
+const checkToken = (token) => {
+  if (tokenToUser.has(token)) {
+    const username = tokenToUser.get(token);
+    if (userMap.has(username)) {
+      if (userMap.get(username).token == token) {
+        return [true, userMap.get(username)];
+      } else {
+        tokenToUser.delete(token);
+        return [false, 'token is expired'];
+      }
+    } else {
+      tokenToUser.delete(token);
+      return [false, 'user does not exist'];
+    }
+  } else {
+    return [false, 'haven\'t login'];
+  }
+};
+
+const user = {
+  add: (req, resp) => {
+    // req.body format:
+    // {
+    //   "username": "user",
+    //   "password": "password",
+    //   "permission": "normal",
+    // }
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (isOk) {
+      const user = errOrUser;
+      if (user.permission != 'admin') {
+        resp.status(400).send({ ok: false, err: 'permission denied' });
+        return;
+      } else {
+        const args = req.body;
+        if (args.permission != 'normal' && args.permission != 'admin') {
+          resp.status(400).send({ ok: false, err: 'wrong argument: permission' });
+          return;
+        }
+        args.username = args.username || '';
+        if (args.username.length == 0) {
+          resp.status(400).send({ ok: false, err: 'wrong argument: username' });
+          return;
+        }
+        args.password = args.password || '';
+        if (args.password.length == 0) {
+          resp.status(400).send({ ok: false, err: 'wrong argument: password' });
+          return;
+        }
+        if (userMap.has(args.username)) {
+          resp.status(400).send({ ok: false, err: 'user exists' });
+          return;
+        }
+        userMap.set(args.username, {
+          password: args.password,
+          permission: args.permission,
+        });
+        resp.send({ ok: true });
+      }
+    } else {
+      resp.status(400).send({ ok: false, err: errOrUser });
+    }
+  },
+  del: (req, resp) => {
+    // req.body format:
+    // {
+    //   "username": "user",
+    // }
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (isOk) {
+      if (errOrUser.permission == 'admin') {
+        resp.send({ ok: userMap.delete(args.username) });
+      } else {
+        resp.status(400).send({ ok: false, err: 'permission denied' });
+      }
+    } else {
+      resp.status(400).send({ ok: false, err: errOrUser });
+    }
+  },
+  list: (req, resp) => {
+    resp.send([...userMap.entries()].map(([key, value]) => {
+      return { username: key, permission: value.permission };
+    }));
+  },
+};
+
+const auth = {
+  login: (req, resp) => {
+    // req.body format:
+    // {
+    //   "username": "admin",
+    //   "password": "P@ssw0rd",
+    // }
+    const args = req.body;
+    if (userMap.has(args.username)) {
+      if (args.password == userMap.get(args.username).password) {
+        const token = util.makeToken(16);
+        userMap.get(args.username).token = token;
+        tokenToUser.set(token, args.username);
+        resp.send({ ok: true, token: token });
+      } else {
+        resp.status(400).send('incorrect password');
+      }
+    } else {
+      resp.status(404).send(`${args.usename} not found`);
+    }
+  },
+  logout: (req, resp) => {
+    const token = req.headers.authorization || '';
+    const [isOk, errOrUser] = checkToken(token);
+    if (isOk) {
+      tokenToUser.delete(errOrUser.token);
+      errOrUser.token = undefined;
+      resp.send({ ok: true });
+    } else {
+      resp.status(400).send({ ok: false, err: errOrUser });
+    }
+  }
+};
+
+// app['get']('/history/list', history.list)
+
+app.map({
+  '/history': {
+    get: history.list,
+    '/revoke': {
+      post: history.revoke
+    },
+  },
+  '/store': {
+    get: store.list,
+    put: store.change,
+    '/in': {
+      post: store.in
+    },
+    '/out': {
+      post: store.out
+    },
+    '/change': {
+      post: store.change
+    },
+    '/search': {
+      '/:pattern': {
+        get: store.search
+      }
+    },
+  },
+  '/user': {
+    get: user.list,
+    post: user.add,
+    delete: user.del,
+  },
+  '/login': {
+    post: auth.login,
+  },
+  '/logout': {
+    post: auth.logout,
+  }
+});
+
+app.use((_, resp) => {
+  resp.status(404).send('not found');
+});
+
+const port = 10101;
+app.listen(port, () => {
+  console.log(`Material management server listening at http://localhost:${port}`);
+});
