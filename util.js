@@ -8,4 +8,4 @@ function makeToken(length) {
   return result;
 }
 
-module.exports = { makeToken: makeToken }
+module.exports = { makeToken: makeToken };

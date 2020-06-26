@@ -373,7 +373,7 @@ const auth = {
     // }
     const args = req.body;
     if (userMap.has(args.username)) {
-      const user = userMap.get(args.username)
+      const user = userMap.get(args.username);
       if (args.password == user.password) {
         const token = util.makeToken(16);
         userMap.get(args.username).token = token;
