@@ -23,15 +23,18 @@ app.map = (a, route) => {
 };
 
 var historyMap = new Map([
-  ['0', 'Put XXX into YYY'],
-  ['1', 'Put NNN into YYY'],
-  ['2', 'Put ZZZ into YYY'],
-  ['3', 'Put GGG into CCC'],
-  ['4', 'Put JJJ into YYY'],
+  ['0', { log: 'Put XXX into YYY', timestamp: new Date() }],
+  ['1', { log: 'Put NNN into YYY', timestamp: new Date() }],
+  ['2', { log: 'Put ZZZ into YYY', timestamp: new Date() }],
+  ['3', { log: 'Put GGG into CCC', timestamp: new Date() }],
+  ['4', { log: 'Put JJJ into YYY', timestamp: new Date() }],
 ]);
 
 const history = {
   list: (req, resp) => {
+    const page = (req.query.page || 1) - 1;
+    const limit = req.query.limit || 5;
+
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
     if (!isOk) {
@@ -39,7 +42,10 @@ const history = {
       return;
     }
 
-    resp.send({ ok: true, data: [...historyMap.entries()].map(([key, value]) => { return { id: key, log: value }; }) });
+    resp.send({
+      ok: true, data: [...historyMap.entries()].map(([key, { log, timestamp }]) => { return { id: key, log: log, timestamp: timestamp }; })
+        .slice(page * limit, page * limit + limit), totalCount: historyMap.size,
+    });
   },
   revoke: (req, resp) => {
     const token = req.headers.authorization || '';
@@ -69,7 +75,7 @@ var storeMap = new Map([
     info: "N/A",
   }],
   ["monitor", {
-    amount: 10,
+    amount: 11,
     operator: "admin",
     place: "4356",
     ctime: new Date(),
@@ -77,7 +83,7 @@ var storeMap = new Map([
     info: "N/A",
   }],
   ["mouse", {
-    amount: 10,
+    amount: 32,
     operator: "admin",
     place: "4356",
     ctime: new Date(),
@@ -85,7 +91,7 @@ var storeMap = new Map([
     info: "N/A",
   }],
   ["keyboard", {
-    amount: 10,
+    amount: 42,
     operator: "admin",
     place: "4356",
     ctime: new Date(),
@@ -93,7 +99,39 @@ var storeMap = new Map([
     info: "N/A",
   }],
   ["airphone", {
-    amount: 10,
+    amount: 55,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["water", {
+    amount: 11,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["cup", {
+    amount: 32,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["desk", {
+    amount: 25,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["chair", {
+    amount: 13,
     operator: "admin",
     place: "4356",
     ctime: new Date(),
@@ -104,6 +142,9 @@ var storeMap = new Map([
 
 const store = {
   list: (req, resp) => {
+    const page = (req.query.page || 1) - 1;
+    const limit = req.query.limit || 5;
+
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
     if (!isOk) {
@@ -114,7 +155,8 @@ const store = {
     resp.send({
       ok: true, data: [...storeMap.entries()].map(([key, value]) => {
         return { name: key, ...value };
-      })
+      }).slice(page * limit, page * limit + limit),
+      totalCount: storeMap.size,
     });
   },
   in: (req, resp) => {
@@ -218,10 +260,14 @@ const store = {
       }
       resp.send({ ok: true });
     } else {
-      resp.status(404).send({ok: true, data: `${args.name} not found`});
+      resp.status(404).send({ ok: true, data: `${args.name} not found` });
     }
   },
   search: (req, resp) => {
+    const page = (req.query.page || 1) - 1;
+    const limit = req.query.limit || 5;
+    const pattern = req.query.pattern || '';
+
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
     if (!isOk) {
@@ -230,7 +276,7 @@ const store = {
     }
 
     // req.params format:
-    // /store/search/keyboard
+    // /store/search?pattern=keyboard
     var list = [...storeMap.entries()].map(([key, value]) => {
       return { name: key, ...value };
     });
@@ -254,8 +300,9 @@ const store = {
       ]
     };
     const fuse = new Fuse(list, options);
-    const pattern = req.params.pattern;
-    resp.send({ok: true, data: fuse.search(pattern).map((r) => r.item)});
+    const res = fuse.search(pattern).map((r) => r.item);
+
+    resp.send({ ok: true, data: res.slice(page * limit, page * limit + limit), totalCount: res.length });
   },
 };
 
@@ -263,7 +310,11 @@ var userMap = new Map([
   ['admin', {
     password: "p@ssw0rd",
     permission: "admin",
-  }]
+  }],
+  ['dorichan', {
+    password: "123456",
+    permission: "normal",
+  }],
 ]);
 var tokenToUser = new Map();
 
@@ -349,6 +400,9 @@ const user = {
     }
   },
   list: (req, resp) => {
+    const page = (req.query.page || 1) - 1;
+    const limit = req.query.limit || 5;
+
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
     if (!isOk) {
@@ -359,7 +413,7 @@ const user = {
     resp.send({
       ok: true, data: [...userMap.entries()].map(([key, value]) => {
         return { username: key, permission: value.permission };
-      })
+      }).slice(page * limit, page * limit + limit), totalCount: userMap.size,
     });
   },
 };
@@ -421,9 +475,7 @@ app.map({
       post: store.change
     },
     '/search': {
-      '/:pattern': {
-        get: store.search
-      }
+      get: store.search
     },
   },
   '/user': {
