@@ -205,27 +205,41 @@ const store = {
 
     // req.body format:
     // {
-    //   "name": "keyboard",
-    //   "amount": 20,
+    //   "list": [
+    //     {
+    //       "name": "keyboard",
+    //       "amount": 20,
+    //     },
+    //     {
+    //       "name": "keyboard",
+    //       "amount": 20,
+    //     },
+    //   ]
     // }
-    const args = req.body;
-    if (storeMap.has(args.name)) {
-      s = storeMap.get(args.name);
+    const list = req.body["list"];
 
-      if (s.amount < args.amount) {
-        resp.status(400).send({ ok: false, err: `${args.name} not enough` });
+    list.forEach(item => {
+      if(storeMap.has(item.name)) {
+        s = storeMap.get(item.name);
+
+        if(s.amount < item.amount) {
+          resp.status(400).send({ok: false, err: `${item.name} not enough`});
+          return;
+        }
+      } else {
+        resp.status(404).send({ ok: false, err: `${item.name} not found` });
         return;
       }
+    });
 
-      s.amount -= args.amount;
-
-      if (s.amount == 0) {
-        storeMap.delete(args.name);
+    list.forEach(item => {
+      s = storeMap.get(item.name);
+      s.amount -= item.amount;
+      if(s.amount == 0) {
+        storeMap.delete(item.name);
       }
-      resp.send({ ok: true });
-    } else {
-      resp.status(404).send({ ok: false, err: `${args.name} not found` });
-    }
+    });
+    resp.send({ ok: true });
   },
   change: (req, resp) => {
     const token = req.headers.authorization || '';
