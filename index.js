@@ -32,8 +32,8 @@ var historyMap = new Map([
 
 const history = {
   list: (req, resp) => {
-    const page = (req.query.page || 1) - 1;
-    const limit = req.query.limit || 5;
+    const page = (parseInt(req.query.page) || 1) - 1;
+    const limit = parseInt(req.query.limit) || 5;
 
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
@@ -138,12 +138,28 @@ var storeMap = new Map([
     utime: new Date(),
     info: "N/A",
   }],
+  ["card", {
+    amount: 5,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
+  ["doll", {
+    amount: 1,
+    operator: "admin",
+    place: "4356",
+    ctime: new Date(),
+    utime: new Date(),
+    info: "N/A",
+  }],
 ]);
 
 const store = {
   list: (req, resp) => {
-    const page = (req.query.page || 1) - 1;
-    const limit = req.query.limit || 5;
+    const page = (parseInt(req.query.page) || 1) - 1;
+    const limit = parseInt(req.query.limit) || 5;
 
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
@@ -174,6 +190,8 @@ const store = {
     //   "operator": "9527",
     //   "place": "4444",
     //   "info": "urgent",
+    //   "ctime": "",
+    //   "utime": "",
     // }
     const args = req.body;
     if (args.amount <= 0) {
@@ -191,6 +209,8 @@ const store = {
         operator: args.operator,
         place: args.place,
         info: args.info,
+        ctime: args.ctime,
+        utime: args.utime,
       });
       resp.send({ ok: true });
     }
@@ -278,8 +298,8 @@ const store = {
     }
   },
   search: (req, resp) => {
-    const page = (req.query.page || 1) - 1;
-    const limit = req.query.limit || 5;
+    const page = (parseInt(req.query.page) || 1) - 1;
+    const limit = parseInt(req.query.limit) || 5;
     const pattern = req.query.pattern || '';
 
     const token = req.headers.authorization || '';
@@ -414,8 +434,8 @@ const user = {
     }
   },
   list: (req, resp) => {
-    const page = (req.query.page || 1) - 1;
-    const limit = req.query.limit || 5;
+    const page = (parseInt(req.query.page) || 1) - 1;
+    const limit = parseInt(req.query.limit) || 5;
 
     const token = req.headers.authorization || '';
     const [isOk, errOrUser] = checkToken(token);
